@@ -1,5 +1,5 @@
-//Created by Giuseppe Tamanini 19/10/2020
-//Licenza CC BY-SA 4.0
+//Created by Giuseppe Tamanini 21/10/2020
+//Licenza CC/SA
 
 #include "HX711.h"
 
@@ -26,21 +26,23 @@ int hh; // ora
 int mm; // min
 int mn = 0; // min count down
 int ssin;  // sec di Time all'inizio del count down
-int sscd; // secondi visualizzati nel count down
+int sscountdown; // secondi visualizzati nel count down
 int sscu; // secondi visualizzati nel count up
 int ss; // secondi
-int oldss; // vecchio valore dei secondi
+int oldsstime; // vecchio valore dei secondi per la visualizzazione dell'ora
+int oldsscu; // vecchio valore dei secondi per la visualizzazione del count up
+int oldsscd; // vecchio valore dei secondi per la visualizzazione del count down
 int GMese[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; // numero di giorni dei mesi
 int gm; // giorni totali mese
 int campo; // seleziona il campo di modifica della data/ora
 long timeColon; // tempo per il lampeggio dei :
 boolean VisPesa = false; // visualizza pesa
-boolean VisDate = false; // visualizza ore/data
+boolean VisTime = false; // visualizza ore/data
 boolean VisCD = false; // visualizza count down
 boolean VisCU = false; // visualizza count up
 boolean CU; // è attivo il count up
+boolean minset; // è attivo quando si stanno impostando i minuti
 boolean CD; // è attivo il count down
-boolean countdownset; // è in corso l'impostazione dei minuti del count down
 const int button1Pin = 2; // pin a cui sono collegati i touch
 const int button2Pin = 3;
 const int button3Pin = 4;
@@ -121,25 +123,27 @@ void loop() {
     buttonPressed = false; // non è premuto nessun touch
   }
 
-  if (button2State && button3State) {
+  if (button2State && button3State) { // se sono premuti contemporaneamente i touch 2 e 3 attiva la variabile button23State
     button23State = true;
   } else {
     button23State = false;
   }
-  if (button23State && oldbutton23State == false) {
+  if (button23State && oldbutton23State == false) { // se sono premuti contemporaneamente i touch 2 e 3 avvia il conto del tempo di premuta
     oldbutton23State = true;
     timepressedInButt23 = millis();
-    Serial.println(timepressedInButt23);
   }
-  if (button23State == false && oldbutton23State) {
+  if (button23State == false && oldbutton23State) { // quando i touch 2 e 3 vengono rilasciati calcola il tempo di premuta
     timepressedButt23 = millis() - timepressedInButt23;
-    Serial.println(timepressedButt23);
     oldbutton23State = false;
   }
-  if (timepressedButt23 > 3000) {
+  if (timepressedButt23 > 3000) { // se i touch 2 e 3 vengono premuti per più di 3 sec avvia la modifica della data e ora
     timepressedButt23 = 0;
-    Serial.println("Modifica data/ora");
     campo = 1;
+    do { // attende che i touch 2 e 3 vengano rilasciati
+      button2State = digitalRead(button2Pin);
+      button3State = digitalRead(button3Pin);
+    } while (button2State && button3State);
+    button3State = false;
     timeNotPressed=(millis());
     modificaDataOra();
   }
@@ -159,8 +163,9 @@ void loop() {
     timepressedButton1 = 0;
     scale.power_up(); // accende l'HX711
     VisPesa = true;
-    VisDate = false;
+    VisTime = false;
     VisCD = false;
+    VisCU = false;
   }
   
   if (button2State && oldbutton2State == false) {  // se è premuto il touch2 avvia il conto del tempo di premuta
@@ -171,10 +176,12 @@ void loop() {
     timepressedButton2 = millis() - timepressedInButton2;
     oldbutton2State = false;
   }  
-  if (timepressedButton2 > 250 && VisDate == false) { // se il touch2 è stato premuto per più di 250 ms visualizza l'ora/data
+  if (timepressedButton2 > 250 && VisTime == false) { // se il touch2 è stato premuto per più di 250 ms visualizza l'ora/data
     timepressedButton2 = 0;
     VisPesa = false;
-    VisDate = true;
+    VisTime = true;
+    VisCD = false;
+    VisCU = false;
   }
   
   if (button3State && oldbutton3State == false) {  // se è premuto il touch3 avvia il conto del tempo di premuta
@@ -185,49 +192,57 @@ void loop() {
     timepressedButton3 = millis() - timepressedInButton3;
     oldbutton3State = false;
   }
-  if (timepressedButton3 > 250 && VisCD == false && CD == false && VisCU == false && CU ==false) { // se il touch2 è stato premuto per più di 5 ms avvia l'impostazione dei minuti del count down
+  if (timepressedButton3 > 250 && VisCD == false && CD == false && VisCU == false && CU ==false) { // se il touch2 è stato premuto per più di 5 ms visualizza 00:00 e attende la scelta successiva
     timepressedButton3 = 0;
     mn = 0;
-    countdownset = true; // la modalità set è attiva
+    minset = true; // la modalità set è attiva
     seg.suppressLeadingZeroPlaces(0);
     seg.displayTime(mn, 0);
     seg.displayColon(true);
     VisPesa = false;
-    VisDate = false;
+    VisTime = false;
     CU = true;
   }
-  if (timepressedButton3 > 25 && countdownset && VisCD == false) { // se il touch2 è stato premuto per più di 25 ms e è attiva countdownset aumenta i minuti del count down
+  if (timepressedButton3 > 25 && minset && VisCD == false) { // se il touch2 è stato premuto per più di 25 ms e è attiva countdownset aumenta i minuti del count down
     timepressedButton3 = 0;
     VisCU = false;
     CU = false;
-    CD = true;
+    CD = false;
     mn = mn + 1;
     seg.displayTime(mn, 0);
     seg.displayColon(true);
   }
 
-  if (millis() - timeNotPressed > 4000 && buttonPressed == false && VisDate) { // se non è stato premuto nessun touch per 4 sec spegne l'ora
-    if (VisCD == false && VisCU == false) {
+  if (millis() - timeNotPressed > 4000 && buttonPressed == false && VisTime) { // se non è stato premuto nessun touch per 4 sec spegne l'ora
+    if (CD == false && CU == false) {
       seg.displayClear();
     }
-    VisDate = false;
+    VisTime = false;
+    if (CD) VisCD = true;
+    if (CU) VisCU = true;
   }
   if (millis() - timeNotPressed > 20000 && buttonPressed == false && VisPesa && misinfun == false) { // se non è stato premuto nessun touch per 20 sec e non ci sono variazioni di misura spegne la pesa
-    seg.displayClear();
+    if (CU) VisCU = true;
+    if (CD) VisCD = true;
+    if (VisCU == false && VisCD == false) seg.displayClear();
     VisPesa = false;
   }
-  if (millis() - timeNotPressed > 3000 && buttonPressed == false && VisCD == false && VisCU == false && CU && CD == false) { // se se si sono impostati i minuti e non è stato premuto alcun touch per 3 sec avvia il count up
+  if (millis() - timeNotPressed > 3000 && buttonPressed == false && VisCU == false && CU && CD == false && minset) { // se se si sono impostati i minuti e non è stato premuto alcun touch per 3 sec avvia il count up
     VisPesa = false;
-    VisDate = false;
+    VisTime = false;
     VisCU = true;
+    minset = false;
+    timeColon = millis();
     seg.displayTime(mn,0);
     ssin = ss;
   }  
-  if (millis() - timeNotPressed > 3000 && buttonPressed == false && VisCD == false && CU == false && CD) { // se sono stati impostati i minuti e non è stato premuto nessun touch per più di 3 sec avvia il coun down
+  if (millis() - timeNotPressed > 3000 && buttonPressed == false && VisCD == false && CU == false && CD == false && minset) { // se sono stati impostati i minuti e non è stato premuto nessun touch per più di 3 sec avvia il coun down
     VisPesa = false;
-    VisDate = false;
+    VisTime = false;
     VisCD = true;
-    countdownset = false;
+    CD = true;
+    minset = false;
+    timeColon = millis();
     seg.displayTime(mn,0);
     ssin = ss;
   }
@@ -240,8 +255,22 @@ void loop() {
     CU = false;
     seg.displayClear(); // spegne il display
   }
-  if (VisPesa) dispPesa(); // avvia la procedura della pesa
-  if (VisDate) dispTime(); // avvia la procedura per la visualizzazione dell'ora/data
+  if (VisPesa && CD && mn == 0 && sscountdown < 10) {
+    VisPesa = false; // chiude la procedura della pesa
+    VisCD = true; // avvia la procedura del count down
+  } else if (VisPesa) {
+    if (CD) dispCD();
+    if (CU) dispCU();
+    dispPesa();
+  }
+  if (VisTime && CD && mn == 0 && sscountdown < 10) {
+    VisTime = false; // chiude la procedura per la visualizzazione dell'ora
+    VisCD = true; // avvia la procedura del count down
+  } else if (VisTime) {
+    Serial.println("ora");
+    if (CD) dispCD();
+    dispTime();
+  }
   if (VisCD) dispCD();
   if (VisCU) dispCU();
 }
@@ -249,57 +278,53 @@ void loop() {
 void dispTime() { //Orologio
   
   seg.suppressLeadingZeroPlaces(0); // visualizza gli zeri non significativi
-  
   if (millis() - timeColon > 500) { //accende o spegne i due punti
     seg.displayColon(false);
   } else {
     seg.displayColon(true);
   }  
-  if (ss != oldss) { //se è passato un secondo
+  if (ss != oldsstime) { //se è passato un secondo
     seg.displayTime(hh, mm); // visualizza l'ora
     timeColon = millis();
-    oldss = ss;
+    oldsstime = ss;
   }
 
 }
 
 void dispCD() {  //CountDown
-
   seg.suppressLeadingZeroPlaces(0); // visualizza gli zeri non significativi
 
-  if (VisCD) {
-    if (millis() - timeColon > 500) { //accende o spegne i due punti
+  if (CD) { // se è in funzione il count down
+    if (millis() - timeColon > 500) { // fa lampeggiare i : ogni mezzo secondo
       seg.displayColon(false);
     } else {
       seg.displayColon(true);
     }
-    if (ss != oldss) { //se è passato un secondo
-      sscd = 60 - ss + ssin;
-      if (sscd > 59) {
-        sscd = sscd - 60;
+    if (ss != oldsscd) { //se è passato un secondo
+      sscountdown = 60 - ss + ssin; // calcola i secondi da visualizzare sul count down
+      if (sscountdown > 59) { // se superano i 59 toglie 60
+        sscountdown = sscountdown - 60;
       }
-      seg.displayTime(mn, sscd);
-      timeColon = millis();
-      oldss = ss;
-      if (sscd == 0) {
+      if (sscountdown == 59 && mn > 0) { // quando i sec arrivano a 59 diminuisce i minuti
         mn = mn - 1;
-        Serial.println(mn);
       }
+      if (VisCD) seg.displayTime(mn, sscountdown); // se è attiva la visualizzazione del count down lo visualizza
+      oldsscd = ss;
+      timeColon = millis();
     }
-    if (mn == -1 && sscd == 0) {
-      seg.displayColon(true);
-      mn = 0;
-      VisCD = false;
-      CD = false;
-      upupaOff = false;
-      upupa();
-      seg.displayClear();
-      do { 
-        button3State = digitalRead(button3Pin);
-      }
-      while (button3State);
-      button3State = false;
-    }
+  }
+  if (VisCD && mn == 0 && sscountdown == 0) { // se è attiva la visualizzazione del count down quando min e sec del conut down arrivano a 0 avvia la procedura che emette i bip
+    seg.displayColon(true);
+    mn = 0;
+    VisCD = false;
+    CD = false;
+    upupaOff = false;
+    upupa(); // avvia la procedura che emette la sequenza di bip
+    seg.displayClear();
+    do { // attende che il touch 3 venga rilasciato
+      button3State = digitalRead(button3Pin);
+    } while (button3State);
+    button3State = false;
   }
 
 }
@@ -308,26 +333,26 @@ void dispCU() {
 
   seg.suppressLeadingZeroPlaces(0); // visualizza gli zeri non significativi
 
-  if (VisCU) {
+  if (CU) {
     if (millis() - timeColon > 500) { //accende o spegne i due punti
       seg.displayColon(false);
     } else {
       seg.displayColon(true);
     }
-    if (ss != oldss) { //se è passato un secondo
+    if (ss != oldsscu) { //se è passato un secondo
+      Serial.println(ssin);
       sscu = ss - ssin;
       if (sscu < 0) {
         sscu = sscu + 60;
       }
-      Serial.println(ssin);
-      seg.displayTime(mn, sscu);
+      if (VisCU) seg.displayTime(mn, sscu);
       timeColon = millis();
-      oldss = ss;
+      oldsscu = ss;
       if (sscu ==59) {
         mn = mn + 1;
       }
     }
-    if (mn == 100 && sscu == 0) {
+    if (VisCU && mn == 100 && sscu == 0) {
       seg.displayColon(true);
       mn = 0;
       VisCU = false;
