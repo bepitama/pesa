@@ -108,20 +108,7 @@ void loop() {
   mm = now.minute();
   ss = now.second();
   
-  button1State = digitalRead(button1Pin);
-  button2State = digitalRead(button2Pin);
-  button3State = digitalRead(button3Pin);
-  if (button1State) {
-    buttonPressed = true;
-  } else if (button2State) {
-    buttonPressed = true;
-  } else if (button3State) {
-    buttonPressed = true;
-  } else if (buttonPressed == true) { // se non è premuto nessun touch e in precedenza è stato premuto un touch
-    Serial.println("nessuno");
-    timeNotPressed = millis(); // calcola il tempo di non premuta
-    buttonPressed = false; // non è premuto nessun touch
-  }
+  buttonpress();
 
   if (button2State && button3State) { // se sono premuti contemporaneamente i touch 2 e 3 attiva la variabile button23State
     button23State = true;
@@ -139,12 +126,13 @@ void loop() {
   if (timepressedButt23 > 3000) { // se i touch 2 e 3 vengono premuti per più di 3 sec avvia la modifica della data e ora
     timepressedButt23 = 0;
     campo = 1;
-    do { // attende che i touch 2 e 3 vengano rilasciati
+    /*do { // attende che i touch 2 e 3 vengano rilasciati
       button2State = digitalRead(button2Pin);
       button3State = digitalRead(button3Pin);
-    } while (button2State && button3State);
-    button3State = false;
-    timeNotPressed=(millis());
+    } while (button2State || button3State);
+    button2State = false;
+    button3State = false;*/
+    timeNotPressed = millis();
     modificaDataOra();
   }
   if (button1State && oldbutton1State == false) { // se è premuto il touch1 avvia il conto del tempo di premuta
@@ -275,6 +263,21 @@ void loop() {
   if (VisCU) dispCU();
 }
 
+void buttonpress() {
+  button1State = digitalRead(button1Pin);
+  button2State = digitalRead(button2Pin);
+  button3State = digitalRead(button3Pin);
+  if (button1State) {
+    buttonPressed = true;
+  } else if (button2State) {
+    buttonPressed = true;
+  } else if (button3State) {
+    buttonPressed = true;
+  } else if (buttonPressed == true) { // se non è premuto nessun touch e in precedenza è stato premuto un touch
+    timeNotPressed = millis(); // calcola il tempo di non premuta
+    buttonPressed = false; // non è premuto nessun touch
+  }
+}
 void dispTime() { //Orologio
   
   seg.suppressLeadingZeroPlaces(0); // visualizza gli zeri non significativi
@@ -429,9 +432,12 @@ void upupa() {
 }
 
 void modificaDataOra() {
-  while (campo < 7) {
+  do {
+    buttonpress();
+  } while (buttonPressed = false);
+  while (campo < 6) {
     Serial.println(campo);
-    while (campo < 7) {
+    while (campo < 6) {
       switch (campo) {
       case 1:  
         seg.displayInt(yy);
@@ -448,9 +454,6 @@ void modificaDataOra() {
       case 5:  
         seg.displayInt(mm);
         break;
-      case 6:  
-        seg.displayInt(ss);
-        break;
       }
       button1State = digitalRead(button1Pin);
       if (button1State && oldbutton1State == false) {
@@ -460,7 +463,7 @@ void modificaDataOra() {
         oldbutton1State = false;  // pone il vecchio stato del pulsante1 a falso
         cambiato1 = false; // lo stato dell'azione del pulsante1 è falsa 
       }
-      if (button1State && oldbutton1State && cambiato1 == false && millis() - timepressedInButton1 > 10) {
+      if (button1State && oldbutton1State && cambiato1 == false && millis() - timepressedInButton1 > 25) {
         switch (campo) {
         case 1:
           if (yy > 2019) yy = yy - 1;
@@ -485,10 +488,6 @@ void modificaDataOra() {
           mm = mm - 1;
           if (mm < 1) mm = 59;
           break;
-        case 6:
-          ss = ss - 1;
-          if (ss < 1) ss = 59;
-          break;
         }
         cambiato1 = true; // lo stato dell'azione del pulsante1 è vera
       }
@@ -500,7 +499,7 @@ void modificaDataOra() {
         oldbutton2State = false;  // pone il vecchio stato del pulsante2 a falso
         cambiato2 = false; // lo stato dell'azione del pulsante2 è falsa 
       }
-      if (button2State && oldbutton2State && cambiato2 == false && millis() - timepressedInButton2 > 10) {
+      if (button2State && oldbutton2State && cambiato2 == false && millis() - timepressedInButton2 > 25) {
         switch (campo) {
         case 1:
           yy = yy + 1;
@@ -540,17 +539,17 @@ void modificaDataOra() {
         oldbutton3State = false;  // pone il vecchio stato del pulsante3 a falso
         cambiato3 = false; // lo stato dell'azione del pulsante3 è falsa 
       }
-      if (button3State && oldbutton3State && cambiato3 == false && millis() - timepressedInButton3 > 10) {
+      if (button3State && oldbutton3State && cambiato3 == false && millis() - timepressedInButton3 > 25) {
         campo = campo + 1;
         cambiato3 = true; // lo stato dell'azione del pulsante3 è vera
       }
       if (millis() - timeNotPressed > 5000) { // se non è stato premuto nessun tasto per 5 sec esce senza salvare
         Serial.print("timeNotPressed");
         Serial.println(millis() - timeNotPressed);
-        campo = 7;
+        campo = 6;
       }
     }
   }
-  if (cambiato3 && campo == 7) rtc.adjust(DateTime(yy, mmm, dd, hh, mm, ss));
+  if (cambiato3 && campo == 6) rtc.adjust(DateTime(yy, mmm, dd, hh, mm, ss));
   seg.displayClear();
 }
