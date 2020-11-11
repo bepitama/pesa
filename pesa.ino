@@ -1,4 +1,4 @@
-//Created by Giuseppe Tamanini 21/10/2020
+//Created by Giuseppe Tamanini 10/11/2020
 //Licenza CC/SA
 
 #include "HX711.h"
@@ -30,6 +30,7 @@ int sscountdown; // secondi visualizzati nel count down
 int sscu; // secondi visualizzati nel count up
 int ss; // secondi
 int oldsstime; // vecchio valore dei secondi per la visualizzazione dell'ora
+int modeDate; // modo di visualizzazione di ora/data/anno
 int oldsscu; // vecchio valore dei secondi per la visualizzazione del count up
 int oldsscd; // vecchio valore dei secondi per la visualizzazione del count down
 int GMese[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; // numero di giorni dei mesi
@@ -95,7 +96,7 @@ void setup() {
   scale.tare();              // resetta la scala
   scale.tare();
   timeColon = millis(); // tempo di accensione dei due punti (:)
-  //attachInterrupt(0, spegneupupa, RISING);
+  
 }
 
 void loop() {
@@ -124,14 +125,14 @@ void loop() {
     oldbutton23State = false;
   }
   if (timepressedButt23 > 3000) { // se i touch 2 e 3 vengono premuti per più di 3 sec avvia la modifica della data e ora
-    timepressedButt23 = 0;
-    campo = 1;
-    /*do { // attende che i touch 2 e 3 vengano rilasciati
+    do { // attende che i touch 2 e 3 vengano rilasciati
       button2State = digitalRead(button2Pin);
       button3State = digitalRead(button3Pin);
     } while (button2State || button3State);
     button2State = false;
-    button3State = false;*/
+    button3State = false;
+    timepressedButt23 = 0;
+    campo = 1;
     timeNotPressed = millis();
     modificaDataOra();
   }
@@ -166,10 +167,17 @@ void loop() {
   }  
   if (timepressedButton2 > 250 && VisTime == false) { // se il touch2 è stato premuto per più di 250 ms visualizza l'ora/data
     timepressedButton2 = 0;
-    VisPesa = false;
     VisTime = true;
+    modeDate = 1;
+    VisPesa = false;
     VisCD = false;
     VisCU = false;
+  }
+  if (timepressedButton2 > 25 && VisTime) {
+    timepressedButton2 = 0;
+    modeDate = modeDate + 1;
+    if (modeDate == 4) modeDate = 1; 
+    Serial.println(modeDate);
   }
   
   if (button3State && oldbutton3State == false) {  // se è premuto il touch3 avvia il conto del tempo di premuta
@@ -203,13 +211,14 @@ void loop() {
 
   if (millis() - timeNotPressed > 4000 && buttonPressed == false && VisTime) { // se non è stato premuto nessun touch per 4 sec spegne l'ora
     if (CD == false && CU == false) {
+      modeDate = 0;
       seg.displayClear();
     }
     VisTime = false;
     if (CD) VisCD = true;
     if (CU) VisCU = true;
   }
-  if (millis() - timeNotPressed > 20000 && buttonPressed == false && VisPesa && misinfun == false) { // se non è stato premuto nessun touch per 20 sec e non ci sono variazioni di misura spegne la pesa
+  if (millis() - timeNotPressed > 10000 && buttonPressed == false && VisPesa && misinfun == false) { // se non è stato premuto nessun touch per 20 sec e non ci sono variazioni di misura spegne la pesa
     if (CU) VisCU = true;
     if (CD) VisCD = true;
     if (VisCU == false && VisCD == false) seg.displayClear();
@@ -254,13 +263,20 @@ void loop() {
   if (VisTime && CD && mn == 0 && sscountdown < 10) {
     VisTime = false; // chiude la procedura per la visualizzazione dell'ora
     VisCD = true; // avvia la procedura del count down
-  } else if (VisTime) {
-    Serial.println("ora");
-    if (CD) dispCD();
-    dispTime();
   }
   if (VisCD) dispCD();
   if (VisCU) dispCU();
+  switch (modeDate) {
+    case 1:
+      dispTime();
+      break;
+    case 2:
+      dispDate();
+      break;
+    case 3:
+      dispAnno();
+      break;
+  }
 }
 
 void buttonpress() {
@@ -278,7 +294,8 @@ void buttonpress() {
     buttonPressed = false; // non è premuto nessun touch
   }
 }
-void dispTime() { //Orologio
+
+void dispTime() { //Visualizza l'ora
   
   seg.suppressLeadingZeroPlaces(0); // visualizza gli zeri non significativi
   if (millis() - timeColon > 500) { //accende o spegne i due punti
@@ -291,6 +308,19 @@ void dispTime() { //Orologio
     timeColon = millis();
     oldsstime = ss;
   }
+
+}
+
+void dispDate() { //Visualizza la data
+  
+  seg.suppressLeadingZeroPlaces(0); // visualizza gli zeri non significativi
+  seg.displayDate(dd, mmm); // visualizza l'ora
+
+}
+
+void dispAnno() { //Visualizza la data
+  
+  seg.displayInt(yy);
 
 }
 
@@ -553,3 +583,4 @@ void modificaDataOra() {
   if (cambiato3 && campo == 6) rtc.adjust(DateTime(yy, mmm, dd, hh, mm, ss));
   seg.displayClear();
 }
+
